@@ -23,6 +23,9 @@
 #include "dma.h"
 #include "usart.h"
 #include "gpio.h"
+#include <string.h>
+#include <stdlib.h>
+
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -33,13 +36,17 @@ void SystemClock_Config(void);
  *
  * @param1 - received sign
  */
-void proccesDmaData(uint8_t sign);
+void proccesDmaData(const uint8_t* sign);
 
 
 /* Space for your global variables. */
 
 	// type your global variables here:
 
+uint8_t count = 0;
+uint8_t count_big = 0;
+uint8_t count_small = 0;
+uint8_t state = 0;
 
 int main(void)
 {
@@ -60,6 +67,7 @@ int main(void)
   /* Space for your local variables, callback registration ...*/
 
   	  //type your code here:
+  USART2_RegisterCallback(proccesDmaData);
 
   while (1)
   {
@@ -68,6 +76,21 @@ int main(void)
 	   * Message format - "Buffer capacity: %d bytes, occupied memory: %d bytes, load [in %]: %f%"
 	   * Example message (what I wish to see in terminal) - Buffer capacity: 1000 bytes, occupied memory: 231 bytes, load [in %]: 23.1%
 	   */
+	  #if POLLING
+	  //Polling for new data, no interrupts
+	  USART2_CheckDmaReception();
+	  LL_mDelay(10);
+	  #else
+	  USART2_PutBuffer(tx_data, sizeof(tx_data));
+	  LL_mDelay(1000);
+	  #endif
+
+	  uint8_t *text = (uint8_t *) malloc(strlen("Count: ") + sizeof(count) + 1 );
+	  strcpy(text, "Count: ");
+	  text[strlen("Count: ")] = count;
+	  text[strlen("Count: ") + 1] = '\0';
+	  USART2_PutBuffer(text, strlen(text));
+	  LL_mDelay(1000);
 
   	  	  	  //type your code here:
   }
@@ -109,11 +132,40 @@ void SystemClock_Config(void)
 /*
  * Implementation of function processing data received via USART.
  */
-void proccesDmaData(uint8_t sign)
+void proccesDmaData(const uint8_t* sign)
 {
-	/* Process received data */
 
-		// type your algorithm here:
+	if(sign[0] == '#' || state){
+
+		uint8_t i = 0;
+		state = 1;
+
+		do{
+				if(*(sign+i) >= 'a' && *(sign+i) <= 'z'){
+					count_small++;
+				}
+
+				if(*(sign+i) >= 'A' && *(sign+i) <= 'Z'){
+									count_big++;
+								}
+				i++;
+
+				if(sign[i] == '\r'){
+					count = i;
+					break;
+				}
+
+		    } while ((i + count) < 35 || sign[i] != '$');
+
+		if(sign[i] == '$' || (i + count) >= 35){
+			state = 0;
+			count_small = 0;
+			count_big = 0;
+			count = 0;
+		}
+	}
+
+	return;
 }
 
 
