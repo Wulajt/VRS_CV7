@@ -24,7 +24,7 @@
 uint8_t bufferUSART2dma[DMA_USART2_BUFFER_SIZE];
 
 /* Declaration and initialization of callback function */
-static void (* USART2_ProcessData)(uint8_t *data) = 0;
+static void (* USART2_ProcessData)(uint8_t *data, uint8_t length) = 0;
 
 /* Register callback */
 void USART2_RegisterCallback(void *callback)
@@ -74,7 +74,7 @@ void MX_USART2_UART_Init(void)
   	  // type DMA USART Rx configuration here
   LL_DMA_SetDataTransferDirection(DMA1, LL_DMA_CHANNEL_6, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
   LL_DMA_SetChannelPriorityLevel(DMA1, LL_DMA_CHANNEL_6, LL_DMA_PRIORITY_MEDIUM);
-  LL_DMA_SetMode(DMA1, LL_DMA_CHANNEL_6, LL_DMA_MODE_CIRCULAR);
+  LL_DMA_SetMode(DMA1, LL_DMA_CHANNEL_6, LL_DMA_MODE_NORMAL);
   LL_DMA_SetPeriphIncMode(DMA1, LL_DMA_CHANNEL_6, LL_DMA_PERIPH_NOINCREMENT);
   LL_DMA_SetMemoryIncMode(DMA1, LL_DMA_CHANNEL_6, LL_DMA_MEMORY_INCREMENT);
   LL_DMA_SetPeriphSize(DMA1, LL_DMA_CHANNEL_6, LL_DMA_PDATAALIGN_BYTE);
@@ -89,10 +89,8 @@ void MX_USART2_UART_Init(void)
   LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_6);
   LL_USART_EnableDMAReq_RX(USART2);
 
-  #if !POLLING
   LL_DMA_EnableIT_TC(DMA1, LL_DMA_CHANNEL_6);
   LL_DMA_EnableIT_HT(DMA1, LL_DMA_CHANNEL_6);
-  #endif
 
 
   /* USART2_TX Init */
@@ -129,9 +127,7 @@ void MX_USART2_UART_Init(void)
   /* Enable USART2 peripheral and interrupts*/
 
   	  //type your code here:
-  #if !POLLING
   LL_USART_EnableIT_IDLE(USART2);
-  #endif
   LL_USART_ConfigAsyncMode(USART2);
   LL_USART_Enable(USART2);
 }
@@ -148,7 +144,6 @@ void USART2_PutBuffer(uint8_t *buffer, uint8_t length)
 
 	LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_7);
 }
-
 
 /*
  *	Function processing data received via USART2 with DMA and stored in bufferUSART2dma.
@@ -167,18 +162,25 @@ void USART2_CheckDmaReception(void)
 
 	if (pos != old_pos)
 	{
+
 		if (pos > old_pos)
 		{
-			USART2_ProcessData(&bufferUSART2dma[old_pos]);
+			USART2_ProcessData(&bufferUSART2dma[old_pos], pos - old_pos);
 		}
 		else
 		{
-			USART2_ProcessData(&bufferUSART2dma[old_pos]);
+			USART2_ProcessData(&bufferUSART2dma[old_pos], DMA_USART2_BUFFER_SIZE - old_pos);
 
 			if (pos > 0)
 			{
-				USART2_ProcessData(&bufferUSART2dma[0]);
+				USART2_ProcessData(&bufferUSART2dma[0], pos);
 			}
+		}
+
+		if (DMA_USART2_BUFFER_SIZE - pos < 20){
+			LL_USART_DisableDMAReq_RX(USARTx);
+			LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_6);
+			init_rx();
 		}
 	}
 

@@ -36,7 +36,7 @@ void SystemClock_Config(void);
  *
  * @param1 - received sign
  */
-void proccesDmaData(const uint8_t* sign);
+void proccesDmaData(const uint8_t* sign, uint8_t length);
 
 
 /* Space for your global variables. */
@@ -69,6 +69,9 @@ int main(void)
   	  //type your code here:
   USART2_RegisterCallback(proccesDmaData);
 
+  uint8_t *text_template = "Buffer capacity: %d bytes, occupied memory: %d bytes, load [in %%]: %3.2f%%\n\r";
+  uint8_t *text_size = "Buffer capacity:  bytes, occupied memory:  bytes, load [in %]: %\n\r";
+
   while (1)
   {
 	  /* Periodic transmission of information about DMA Rx buffer state.
@@ -76,23 +79,19 @@ int main(void)
 	   * Message format - "Buffer capacity: %d bytes, occupied memory: %d bytes, load [in %]: %f%"
 	   * Example message (what I wish to see in terminal) - Buffer capacity: 1000 bytes, occupied memory: 231 bytes, load [in %]: 23.1%
 	   */
-	  #if POLLING
-	  //Polling for new data, no interrupts
-	  USART2_CheckDmaReception();
-	  LL_mDelay(10);
-	  #else
-	  USART2_PutBuffer(tx_data, sizeof(tx_data));
-	  LL_mDelay(1000);
-	  #endif
 
-	  uint8_t *text = (uint8_t *) malloc(strlen("Count: ") + sizeof(count) + 1 );
-	  strcpy(text, "Count: ");
-	  text[strlen("Count: ")] = count;
-	  text[strlen("Count: ") + 1] = '\0';
-	  USART2_PutBuffer(text, strlen(text));
-	  LL_mDelay(1000);
+	  uint8_t buffer_filled = DMA_USART2_BUFFER_SIZE - LL_DMA_GetDataLength(DMA1, LL_DMA_CHANNEL_6);
+	  float buffer_percentage = (float)(100*buffer_filled)/(float)(DMA_USART2_BUFFER_SIZE);
 
-  	  	  	  //type your code here:
+	  uint8_t length = snprintf( NULL, 0, "%d", DMA_USART2_BUFFER_SIZE);
+	  length = length + snprintf( NULL, 0, "%d", buffer_filled);
+	  length = length + snprintf( NULL, 0, "%3.2f", buffer_percentage);
+	  length = length + strlen(text_size);
+
+	  uint8_t *text = (uint8_t *) malloc(length + 1);
+	  snprintf(text, length + 1, text_template, DMA_USART2_BUFFER_SIZE, buffer_filled, buffer_percentage);
+	  USART2_PutBuffer(text, length + 1);
+	  LL_mDelay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -132,39 +131,31 @@ void SystemClock_Config(void)
 /*
  * Implementation of function processing data received via USART.
  */
-void proccesDmaData(const uint8_t* sign)
+void proccesDmaData(const uint8_t* sign, uint8_t length)
 {
+	for (uint8_t i = 0; i < length; i++){
 
-	if(sign[0] == '#' || state){
+		if(*(sign+i) == '#' || state){
+			state = 1;
+			if(*(sign+i) >= 'a' && *(sign+i) <= 'z'){
+				count_small++;
+			}
 
-		uint8_t i = 0;
-		state = 1;
-
-		do{
-				if(*(sign+i) >= 'a' && *(sign+i) <= 'z'){
-					count_small++;
-				}
-
-				if(*(sign+i) >= 'A' && *(sign+i) <= 'Z'){
-									count_big++;
-								}
-				i++;
-
-				if(sign[i] == '\r'){
-					count = i;
-					break;
-				}
-
-		    } while ((i + count) < 35 || sign[i] != '$');
-
-		if(sign[i] == '$' || (i + count) >= 35){
-			state = 0;
-			count_small = 0;
-			count_big = 0;
-			count = 0;
+			if(*(sign+i) >= 'A' && *(sign+i) <= 'Z'){
+				count_big++;
+			}
+			if(*(sign+i) == '\r'){
+				count = i + 1;
+				break;
+			}
+			if(*(sign+i) == '$' || (i + count + 1) >= 35){
+				state = 0;
+				count_small = 0;
+				count_big = 0;
+				count = 0;
+			}
 		}
 	}
-
 	return;
 }
 
