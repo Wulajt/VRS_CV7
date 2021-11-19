@@ -178,9 +178,13 @@ void USART2_CheckDmaReception(void)
 		}
 
 		if (DMA_USART2_BUFFER_SIZE - pos < 20){
-			LL_USART_DisableDMAReq_RX(USARTx);
 			LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_6);
-			init_rx();
+			LL_DMA_ConfigAddresses(    DMA1, LL_DMA_CHANNEL_6,
+			LL_USART_DMA_GetRegAddr(USART2, LL_USART_DMA_REG_DATA_RECEIVE),
+			(uint32_t)bufferUSART2dma,
+			LL_DMA_GetDataTransferDirection(DMA1, LL_DMA_CHANNEL_6));
+			LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_6, DMA_USART2_BUFFER_SIZE);
+			LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_6);
 		}
 	}
 
